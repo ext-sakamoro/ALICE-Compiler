@@ -2,7 +2,7 @@
 name = "alice-compiler"
 version = "1.0.0"
 edition = "2021"
-authors = ["Moroya Sakamoto"]
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
 license = "MIT OR Apache-2.0"
 description = "ALICE DSL/JIT compiler infrastructure: AST, IR, code generation, optimization passes"
 
