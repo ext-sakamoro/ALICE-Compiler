@@ -1,0 +1,41 @@
+[package]
+name = "alice-compiler-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+[dependencies.alice-compiler]
+path = ".."
+
+# cargo-machete false-positive 予防 (canonical [[reference_alice_ci_canonical_template]] 罠 #3)
+# libfuzzer-sys は fuzz_target! macro 内でのみ参照されるため machete が誤検知
+[package.metadata.cargo-machete]
+ignored = ["libfuzzer-sys"]
+
+[workspace]
+members = ["."]
+
+# 攻撃者制御 byte で AST expression を組み立て、compile → run が panic せず終端することを検証
+[[bin]]
+name = "fuzz_ast_compile"
+path = "fuzz_targets/fuzz_ast_compile.rs"
+doc = false
+
+# 攻撃者制御 IR program を VM で execute しても panic せず終端することを検証
+[[bin]]
+name = "fuzz_ir_execute"
+path = "fuzz_targets/fuzz_ir_execute.rs"
+doc = false
+
+# 攻撃者制御 IR program に optimizer (constant folding / DCE / peephole) を適用しても panic せず終端することを検証
+[[bin]]
+name = "fuzz_optimize_passes"
+path = "fuzz_targets/fuzz_optimize_passes.rs"
+doc = false
