@@ -1,5 +1,10 @@
 name: CI
 
+# canonical CI template: [[reference_alice_ci_canonical_template]] 手順 4.5
+# 2026-09-15 強化 (それまで fmt + actionlint のみで test / clippy / doc は CI 未実行):
+# - test / clippy `--all-targets` (pedantic は 0 件なので最初から `-D warnings` gate) / doc `-D warnings`
+# - 依存 0 / feature 0 なので stub / powerset / no_std job は不要
+
 on:
   push:
     branches: [main]
@@ -8,27 +13,61 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
 
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test
+
+  clippy:
+    name: Clippy (all targets, pedantic, -D warnings)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy
+        run: cargo clippy --all-targets -- -W clippy::pedantic -D warnings
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
       - name: Check formatting
         run: cargo fmt -- --check
 
+  doc:
+    name: Doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Doc
+        run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: "-Dwarnings"
+
   actionlint:
     name: actionlint (workflow YAML 検証)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run actionlint
         uses: reviewdog/action-actionlint@v1
         with:
           fail_level: error
           reporter: github-check
-
