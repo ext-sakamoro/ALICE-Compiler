@@ -5,7 +5,7 @@
 # ALICE-SDF v1.7.7 (commit 52d26f9) の deny.toml を base に ALICE-Compiler 用に調整
 #
 # ALICE-Compiler 自体は MIT OR Apache-2.0 (permissive) のため自己 exception 不要
-# sibling path dep は 0 (alice-stubs は no-op)
+# sibling path dep は 0
 
 [graph]
 all-features = false
