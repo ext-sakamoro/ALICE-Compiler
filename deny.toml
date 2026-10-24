@@ -69,6 +69,9 @@ allow = [
     "CDLA-Permissive-2.0",
 ]
 
+[licenses.private]
+ignore = true
+
 [[licenses.clarify]]
 name = "ring"
 version = "*"
