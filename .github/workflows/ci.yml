@@ -1,6 +1,5 @@
 name: CI
 
-# canonical CI template: [[reference_alice_ci_canonical_template]] 手順 4.5
 # 2026-09-15 強化 (それまで fmt + actionlint のみで test / clippy / doc は CI 未実行):
 # - test / clippy `--all-targets` (pedantic は 0 件なので最初から `-D warnings` gate) / doc `-D warnings`
 # - 依存 0 / feature 0 なので stub / powerset / no_std job は不要

@@ -8,7 +8,6 @@
 //!
 //! を全て有限時間で panic なく完了することを保証する
 //!
-//! canonical CI template [[reference_alice_ci_canonical_template]] 準拠
 //! ast/ir types が Arbitrary を derive していないため Unstructured から手動構築
 
 #![no_main]

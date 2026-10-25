@@ -8,7 +8,6 @@
 //!
 //! を全て有限時間で panic なく完了することを保証する
 //!
-//! canonical CI template [[reference_alice_ci_canonical_template]] 準拠
 //! 注: VM は無限 loop 検出を持たないため fuzz 側で instruction 長 + register_count を上限化して停止性を担保
 
 #![no_main]
