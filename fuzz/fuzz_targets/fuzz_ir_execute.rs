@@ -14,7 +14,7 @@
 
 use alice_compiler::ast::{BinOp, UnaryOp};
 use alice_compiler::ir::{Ir, IrProgram, LabelId, Reg, Value};
-use alice_compiler::vm::Vm;
+use alice_compiler::vm::{Vm, VmLimits};
 use arbitrary::Unstructured;
 use libfuzzer_sys::fuzz_target;
 
@@ -146,7 +146,11 @@ fuzz_target!(|data: &[u8]| {
     instructions.push(Ir::Return(0));
 
     let program = IrProgram { instructions, register_count };
-    let mut vm = Vm::new();
+    let mut vm = Vm::with_limits(VmLimits {
+        // far more than 64 instructions need unless they loop: a loop costs little, so more inputs run
+        max_steps: 4096,
+        ..VmLimits::DEFAULT
+    });
     // Result::Err は許容 (unknown var / type mismatch / label undefined 等)、panic ゼロが gate
     let _ = vm.execute(&program);
 });

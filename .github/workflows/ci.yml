@@ -24,6 +24,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test
         run: cargo test
+      # without overflow checks integer overflow wraps instead of panicking, so a result can differ
+      # between the profiles
+      - name: Test (arithmetic and rejected input, release profile)
+        run: cargo test --release --test int_arithmetic_wraps --test vm_rejects_a_bad_program --test undefined_variable --test limits --test optimizer_keeps_meaning
 
   clippy:
     name: Clippy (all targets, pedantic, -D warnings)
