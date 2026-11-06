@@ -5,6 +5,24 @@ use std::collections::HashMap;
 use crate::ast::{BinOp, Expr, UnaryOp};
 use crate::ir::{Ir, IrProgram, LabelId, Reg, Value};
 
+/// Why an expression has no IR.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CompileError {
+    /// The expression uses a name no `let` around it binds.
+    UndefinedVariable { name: String },
+}
+
+impl std::fmt::Display for CompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UndefinedVariable { name } => write!(f, "undefined variable: {name}"),
+        }
+    }
+}
+
+impl std::error::Error for CompileError {}
+
 /// Lowers AST to IR.
 pub struct Codegen {
     instructions: Vec<Ir>,
@@ -48,15 +66,15 @@ impl Codegen {
 
     /// Compile an AST expression into IR, returning the result register.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if an undefined variable is referenced.
-    pub fn compile_expr(&mut self, expr: &Expr) -> Reg {
+    /// [`CompileError::UndefinedVariable`] if an undefined variable is referenced.
+    pub fn compile_expr(&mut self, expr: &Expr) -> Result<Reg, CompileError> {
         match expr {
-            Expr::Int(v) => self.emit_const(Value::Int(*v)),
-            Expr::Float(v) => self.emit_const(Value::Float(*v)),
-            Expr::Bool(v) => self.emit_const(Value::Bool(*v)),
-            Expr::Str(s) => self.emit_const(Value::Str(s.clone())),
+            Expr::Int(v) => Ok(self.emit_const(Value::Int(*v))),
+            Expr::Float(v) => Ok(self.emit_const(Value::Float(*v))),
+            Expr::Bool(v) => Ok(self.emit_const(Value::Bool(*v))),
+            Expr::Str(s) => Ok(self.emit_const(Value::Str(s.clone()))),
             Expr::Var(name) => self.compile_var(name),
             Expr::Binary { op, lhs, rhs } => self.compile_binary(*op, lhs, rhs),
             Expr::Unary { op, operand } => self.compile_unary(*op, operand),
@@ -74,18 +92,22 @@ impl Codegen {
         dst
     }
 
-    fn compile_var(&mut self, name: &str) -> Reg {
-        let src = self.vars.get(name).copied().unwrap_or_else(|| {
-            panic!("undefined variable: {name}");
-        });
+    fn compile_var(&mut self, name: &str) -> Result<Reg, CompileError> {
+        let src = self
+            .vars
+            .get(name)
+            .copied()
+            .ok_or_else(|| CompileError::UndefinedVariable {
+                name: name.to_owned(),
+            })?;
         let dst = self.alloc_reg();
         self.emit(Ir::Copy { dst, src });
-        dst
+        Ok(dst)
     }
 
-    fn compile_binary(&mut self, op: BinOp, lhs: &Expr, rhs: &Expr) -> Reg {
-        let lhs_reg = self.compile_expr(lhs);
-        let rhs_reg = self.compile_expr(rhs);
+    fn compile_binary(&mut self, op: BinOp, lhs: &Expr, rhs: &Expr) -> Result<Reg, CompileError> {
+        let lhs_reg = self.compile_expr(lhs)?;
+        let rhs_reg = self.compile_expr(rhs)?;
         let dst = self.alloc_reg();
         self.emit(Ir::BinOp {
             op,
@@ -93,30 +115,30 @@ impl Codegen {
             lhs: lhs_reg,
             rhs: rhs_reg,
         });
-        dst
+        Ok(dst)
     }
 
-    fn compile_unary(&mut self, op: UnaryOp, operand: &Expr) -> Reg {
-        let src = self.compile_expr(operand);
+    fn compile_unary(&mut self, op: UnaryOp, operand: &Expr) -> Result<Reg, CompileError> {
+        let src = self.compile_expr(operand)?;
         let dst = self.alloc_reg();
         self.emit(Ir::UnaryOp { op, dst, src });
-        dst
+        Ok(dst)
     }
 
-    fn compile_let(&mut self, name: &str, value: &Expr, body: &Expr) -> Reg {
-        let val_reg = self.compile_expr(value);
+    fn compile_let(&mut self, name: &str, value: &Expr, body: &Expr) -> Result<Reg, CompileError> {
+        let val_reg = self.compile_expr(value)?;
         let old = self.vars.insert(name.to_owned(), val_reg);
-        let body_reg = self.compile_expr(body);
+        let body_reg = self.compile_expr(body)?;
         if let Some(prev) = old {
             self.vars.insert(name.to_owned(), prev);
         } else {
             self.vars.remove(name);
         }
-        body_reg
+        Ok(body_reg)
     }
 
-    fn compile_if(&mut self, cond: &Expr, then: &Expr, else_: &Expr) -> Reg {
-        let cond_reg = self.compile_expr(cond);
+    fn compile_if(&mut self, cond: &Expr, then: &Expr, else_: &Expr) -> Result<Reg, CompileError> {
+        let cond_reg = self.compile_expr(cond)?;
         let else_label = self.alloc_label();
         let end_label = self.alloc_label();
         let result = self.alloc_reg();
@@ -126,7 +148,7 @@ impl Codegen {
             target: else_label,
         });
 
-        let then_reg = self.compile_expr(then);
+        let then_reg = self.compile_expr(then)?;
         self.emit(Ir::Copy {
             dst: result,
             src: then_reg,
@@ -134,36 +156,39 @@ impl Codegen {
         self.emit(Ir::Jump(end_label));
 
         self.emit(Ir::Label(else_label));
-        let else_reg = self.compile_expr(else_);
+        let else_reg = self.compile_expr(else_)?;
         self.emit(Ir::Copy {
             dst: result,
             src: else_reg,
         });
 
         self.emit(Ir::Label(end_label));
-        result
+        Ok(result)
     }
 
-    fn compile_block(&mut self, exprs: &[Expr]) -> Reg {
+    fn compile_block(&mut self, exprs: &[Expr]) -> Result<Reg, CompileError> {
         let mut last = self.alloc_reg();
         self.emit(Ir::LoadConst {
             dst: last,
             val: Value::Unit,
         });
         for e in exprs {
-            last = self.compile_expr(e);
+            last = self.compile_expr(e)?;
         }
-        last
+        Ok(last)
     }
 
     /// Compile a top-level expression and produce an `IrProgram`.
-    #[must_use]
-    pub fn compile(mut self, expr: &Expr) -> IrProgram {
-        let result = self.compile_expr(expr);
+    ///
+    /// # Errors
+    ///
+    /// [`CompileError::UndefinedVariable`] if an undefined variable is referenced.
+    pub fn compile(mut self, expr: &Expr) -> Result<IrProgram, CompileError> {
+        let result = self.compile_expr(expr)?;
         self.emit(Ir::Return(result));
-        IrProgram {
+        Ok(IrProgram {
             register_count: self.next_reg,
             instructions: self.instructions,
-        }
+        })
     }
 }

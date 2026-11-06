@@ -13,7 +13,7 @@ use crate::vm::Vm;
 /// Returns an error string if compilation or execution fails.
 pub fn compile_and_run(expr: &Expr) -> Result<Value, String> {
     let codegen = Codegen::new();
-    let program = codegen.compile(expr);
+    let program = codegen.compile(expr).map_err(|e| e.to_string())?;
     let mut vm = Vm::new();
     vm.execute(&program)
 }
@@ -25,7 +25,7 @@ pub fn compile_and_run(expr: &Expr) -> Result<Value, String> {
 /// Returns an error string if compilation or execution fails.
 pub fn compile_optimize_and_run(expr: &Expr) -> Result<Value, String> {
     let codegen = Codegen::new();
-    let mut program = codegen.compile(expr);
+    let mut program = codegen.compile(expr).map_err(|e| e.to_string())?;
     optimize(&mut program);
     let mut vm = Vm::new();
     vm.execute(&program)

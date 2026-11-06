@@ -274,7 +274,7 @@ fn test_ir_display_unaryop() {
 
 #[test]
 fn test_codegen_int() {
-    let program = Codegen::new().compile(&Expr::Int(42));
+    let program = Codegen::new().compile(&Expr::Int(42)).unwrap();
     assert!(program.register_count >= 1);
     assert!(!program.instructions.is_empty());
 }
@@ -282,21 +282,21 @@ fn test_codegen_int() {
 #[test]
 fn test_codegen_binary() {
     let e = Expr::binary(BinOp::Add, Expr::Int(1), Expr::Int(2));
-    let program = Codegen::new().compile(&e);
+    let program = Codegen::new().compile(&e).unwrap();
     assert!(program.register_count >= 3);
 }
 
 #[test]
 fn test_codegen_let() {
     let e = Expr::let_bind("x", Expr::Int(10), Expr::Var("x".into()));
-    let program = Codegen::new().compile(&e);
+    let program = Codegen::new().compile(&e).unwrap();
     assert!(program.register_count >= 2);
 }
 
 #[test]
 fn test_codegen_if() {
     let e = Expr::if_expr(Expr::Bool(true), Expr::Int(1), Expr::Int(0));
-    let program = Codegen::new().compile(&e);
+    let program = Codegen::new().compile(&e).unwrap();
     assert!(program
         .instructions
         .iter()
@@ -306,14 +306,14 @@ fn test_codegen_if() {
 #[test]
 fn test_codegen_block() {
     let e = Expr::Block(vec![Expr::Int(1), Expr::Int(2)]);
-    let program = Codegen::new().compile(&e);
+    let program = Codegen::new().compile(&e).unwrap();
     assert!(program.register_count >= 3);
 }
 
 #[test]
 fn test_codegen_unary() {
     let e = Expr::unary(UnaryOp::Neg, Expr::Int(5));
-    let program = Codegen::new().compile(&e);
+    let program = Codegen::new().compile(&e).unwrap();
     assert!(program
         .instructions
         .iter()
@@ -620,7 +620,7 @@ fn test_vm_double_not() {
 #[test]
 fn test_constant_folding_add() {
     let e = Expr::binary(BinOp::Add, Expr::Int(3), Expr::Int(4));
-    let mut program = Codegen::new().compile(&e);
+    let mut program = Codegen::new().compile(&e).unwrap();
     constant_folding(&mut program);
     let has_seven = program.instructions.iter().any(|ir| {
         matches!(
@@ -637,7 +637,7 @@ fn test_constant_folding_add() {
 #[test]
 fn test_constant_folding_mul() {
     let e = Expr::binary(BinOp::Mul, Expr::Int(6), Expr::Int(7));
-    let mut program = Codegen::new().compile(&e);
+    let mut program = Codegen::new().compile(&e).unwrap();
     constant_folding(&mut program);
     let has_42 = program.instructions.iter().any(|ir| {
         matches!(
@@ -658,7 +658,7 @@ fn test_constant_folding_chain() {
         Expr::binary(BinOp::Add, Expr::Int(2), Expr::Int(3)),
         Expr::Int(4),
     );
-    let mut program = Codegen::new().compile(&e);
+    let mut program = Codegen::new().compile(&e).unwrap();
     constant_folding(&mut program);
     let has_20 = program.instructions.iter().any(|ir| {
         matches!(
@@ -675,7 +675,7 @@ fn test_constant_folding_chain() {
 #[test]
 fn test_constant_folding_float() {
     let e = Expr::binary(BinOp::Add, Expr::Float(1.5), Expr::Float(2.5));
-    let mut program = Codegen::new().compile(&e);
+    let mut program = Codegen::new().compile(&e).unwrap();
     constant_folding(&mut program);
     let has_four = program.instructions.iter().any(|ir| {
         matches!(ir, Ir::LoadConst { val: Value::Float(v), .. } if (*v - 4.0).abs() < f64::EPSILON)
@@ -686,7 +686,7 @@ fn test_constant_folding_float() {
 #[test]
 fn test_constant_folding_neg() {
     let e = Expr::unary(UnaryOp::Neg, Expr::Int(5));
-    let mut program = Codegen::new().compile(&e);
+    let mut program = Codegen::new().compile(&e).unwrap();
     constant_folding(&mut program);
     let has_neg5 = program.instructions.iter().any(|ir| {
         matches!(
@@ -703,7 +703,7 @@ fn test_constant_folding_neg() {
 #[test]
 fn test_constant_folding_not() {
     let e = Expr::unary(UnaryOp::Not, Expr::Bool(true));
-    let mut program = Codegen::new().compile(&e);
+    let mut program = Codegen::new().compile(&e).unwrap();
     constant_folding(&mut program);
     let has_false = program.instructions.iter().any(|ir| {
         matches!(
@@ -720,7 +720,7 @@ fn test_constant_folding_not() {
 #[test]
 fn test_constant_propagation() {
     let e = Expr::let_bind("x", Expr::Int(42), Expr::Var("x".into()));
-    let mut program = Codegen::new().compile(&e);
+    let mut program = Codegen::new().compile(&e).unwrap();
     constant_propagation(&mut program);
     let load_count = program
         .instructions
@@ -741,7 +741,7 @@ fn test_constant_propagation() {
 #[test]
 fn test_dead_code_elimination() {
     let e = Expr::if_expr(Expr::Bool(true), Expr::Int(1), Expr::Int(0));
-    let mut program = Codegen::new().compile(&e);
+    let mut program = Codegen::new().compile(&e).unwrap();
     let before = program.instructions.len();
     dead_code_elimination(&mut program);
     let after = program.instructions.len();
@@ -1112,7 +1112,7 @@ fn test_vm_call_inline() {
 #[test]
 fn test_constant_folding_string() {
     let e = Expr::binary(BinOp::Add, Expr::Str("foo".into()), Expr::Str("bar".into()));
-    let mut program = Codegen::new().compile(&e);
+    let mut program = Codegen::new().compile(&e).unwrap();
     constant_folding(&mut program);
     let has_foobar = program
         .instructions
