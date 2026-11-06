@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use crate::ast::{BinOp, Expr, UnaryOp};
 use crate::ir::{Ir, IrProgram, LabelId, Reg, Value};
 
-/// How deep an expression may nest. There is no outside spec for this; it is chosen because lowering
+/// How deep an expression may nest.
+///
+/// There is no outside spec for this; it is chosen because lowering
 /// recurses once per level, so an AST as deep as its input can overflow the stack, and 256 levels fit
 /// the 2 MiB stack of a spawned thread with room for the caller.
 pub const MAX_EXPR_DEPTH: usize = 256;

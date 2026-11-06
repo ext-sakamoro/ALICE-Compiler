@@ -3,7 +3,9 @@
 use crate::ast::{BinOp, UnaryOp};
 use crate::ir::Value;
 
-/// The longest string `+` makes, in bytes. There is no outside spec for this; it is chosen because
+/// The longest string `+` makes, in bytes.
+///
+/// There is no outside spec for this; it is chosen because
 /// `s = s + s` doubles a string with each instruction, and this bounds what one operation allocates
 /// while leaving room for any text a program of this language holds as a constant.
 pub const MAX_STRING_LEN: usize = 1 << 20;

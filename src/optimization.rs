@@ -6,11 +6,15 @@ use crate::eval::{eval_binop, eval_unaryop};
 use crate::ir::{Ir, IrProgram, Reg, Value};
 use crate::vm::{check_program, VmLimits};
 
-/// Bytes of strings one pass may make. There is no outside spec for this; it is the
+/// Bytes of strings one pass may make.
+///
+/// There is no outside spec for this; it is the
 /// `max_string_bytes` default of the VM, chosen because a pass holds what a run would.
 pub const MAX_PASS_STRING_BYTES: usize = VmLimits::DEFAULT.max_string_bytes;
 
-/// The string bytes left to a pass. A pass that runs out stops where it is: what it has rewritten
+/// The string bytes left to a pass.
+///
+/// A pass that runs out stops where it is: what it has rewritten
 /// so far means the same as before, and the rest stays for the VM, whose own limit then applies.
 struct Budget(usize);
 

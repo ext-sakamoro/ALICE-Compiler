@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use crate::eval::{eval_binop, eval_unaryop};
 use crate::ir::{Ir, IrProgram, LabelId, Reg, Value};
 
-/// What one execution may use. All of it is counted, never timed, so a program gives the same result
+/// What one execution may use.
+///
+/// All of it is counted, never timed, so a program gives the same result
 /// on every machine. There is no outside spec for the defaults; each says why it was chosen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VmLimits {

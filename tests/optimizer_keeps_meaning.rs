@@ -60,7 +60,8 @@ fn program(instructions: Vec<Ir>, register_count: usize) -> IrProgram {
     }
 }
 
-/// Programs whose answer can be read off.
+/// Programs whose answer can be read off: a table, long because each row is written out.
+#[allow(clippy::too_many_lines)]
 fn rows() -> Vec<(&'static str, IrProgram, Value)> {
     vec![
         (
@@ -227,7 +228,7 @@ impl Rng {
         z ^ (z >> 31)
     }
     fn below(&mut self, n: u64) -> usize {
-        (self.next() % n) as usize
+        usize::try_from(self.next() % n).unwrap()
     }
 }
 
@@ -242,7 +243,7 @@ fn value(r: &mut Rng) -> Value {
         3 => Value::Float(1.5),
         4 => Value::Int(i64::MIN),
         5 => Value::Int(0),
-        _ => Value::Int(r.below(7) as i64 - 3),
+        _ => Value::Int(i64::try_from(r.below(7)).unwrap() - 3),
     }
 }
 
