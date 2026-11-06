@@ -5,18 +5,26 @@ use std::collections::HashMap;
 use crate::ast::{BinOp, Expr, UnaryOp};
 use crate::ir::{Ir, IrProgram, LabelId, Reg, Value};
 
+/// How deep an expression may nest. There is no outside spec for this; it is chosen because lowering
+/// recurses once per level, so an AST as deep as its input can overflow the stack, and 256 levels fit
+/// the 2 MiB stack of a spawned thread with room for the caller.
+pub const MAX_EXPR_DEPTH: usize = 256;
+
 /// Why an expression has no IR.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CompileError {
     /// The expression uses a name no `let` around it binds.
     UndefinedVariable { name: String },
+    /// The expression nests deeper than [`MAX_EXPR_DEPTH`].
+    TooDeep,
 }
 
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UndefinedVariable { name } => write!(f, "undefined variable: {name}"),
+            Self::TooDeep => write!(f, "expression nests deeper than {MAX_EXPR_DEPTH}"),
         }
     }
 }
@@ -29,6 +37,7 @@ pub struct Codegen {
     pub(crate) next_reg: Reg,
     next_label: LabelId,
     vars: HashMap<String, Reg>,
+    depth: usize,
 }
 
 impl Default for Codegen {
@@ -45,6 +54,7 @@ impl Codegen {
             next_reg: 0,
             next_label: 0,
             vars: HashMap::new(),
+            depth: 0,
         }
     }
 
@@ -68,8 +78,19 @@ impl Codegen {
     ///
     /// # Errors
     ///
-    /// [`CompileError::UndefinedVariable`] if an undefined variable is referenced.
+    /// [`CompileError::UndefinedVariable`] if an undefined variable is referenced,
+    /// [`CompileError::TooDeep`] past [`MAX_EXPR_DEPTH`].
     pub fn compile_expr(&mut self, expr: &Expr) -> Result<Reg, CompileError> {
+        if self.depth >= MAX_EXPR_DEPTH {
+            return Err(CompileError::TooDeep);
+        }
+        self.depth += 1;
+        let reg = self.compile_node(expr);
+        self.depth -= 1;
+        reg
+    }
+
+    fn compile_node(&mut self, expr: &Expr) -> Result<Reg, CompileError> {
         match expr {
             Expr::Int(v) => Ok(self.emit_const(Value::Int(*v))),
             Expr::Float(v) => Ok(self.emit_const(Value::Float(*v))),
@@ -182,7 +203,8 @@ impl Codegen {
     ///
     /// # Errors
     ///
-    /// [`CompileError::UndefinedVariable`] if an undefined variable is referenced.
+    /// [`CompileError::UndefinedVariable`] if an undefined variable is referenced,
+    /// [`CompileError::TooDeep`] past [`MAX_EXPR_DEPTH`].
     pub fn compile(mut self, expr: &Expr) -> Result<IrProgram, CompileError> {
         let result = self.compile_expr(expr)?;
         self.emit(Ir::Return(result));

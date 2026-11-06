@@ -19,12 +19,14 @@ COMMAND = [
     "--test", "int_arithmetic_wraps",
     "--test", "vm_rejects_a_bad_program",
     "--test", "undefined_variable",
+    "--test", "limits",
 ]
 FAILED = re.compile(r"^test .* \.\.\. .*FAILED", re.M)
 
 EVAL = "src/eval.rs"
 VM = "src/vm.rs"
 CODEGEN = "src/codegen.rs"
+OPT = "src/optimization.rs"
 # (what breaks, file, old text, new text)
 MUTANTS = [
     ("negation by the operator", EVAL, "v.wrapping_neg()", "-*v"),
@@ -58,6 +60,19 @@ MUTANTS = [
     ("a left operand not checked", VM, "                register(*lhs)?;\n", "                let _ = lhs;\n"),
     ("a loaded register not checked", VM, "Ir::LoadConst { dst, .. } => register(*dst)?,", "Ir::LoadConst { .. } => {}"),
     ("the error names no variable", CODEGEN, "name: name.to_owned(),", "name: String::new(),"),
+    ("no step limit", VM, "if steps >= self.limits.max_steps {", "if false {"),
+    ("the step limit is one off", VM, "if steps >= self.limits.max_steps {", "if steps > self.limits.max_steps {"),
+    ("no string cap", EVAL, "if a.len().saturating_add(b.len()) > MAX_STRING_LEN {", "if false {"),
+    ("the string cap is one off", EVAL, "if a.len().saturating_add(b.len()) > MAX_STRING_LEN {", "if a.len().saturating_add(b.len()) >= MAX_STRING_LEN {"),
+    ("no total of string bytes", VM, "if *spent > self.limits.max_string_bytes {", "if false {"),
+    ("the total is one off", VM, "if *spent > self.limits.max_string_bytes {", "if *spent >= self.limits.max_string_bytes {"),
+    ("a load is not charged", VM, "                    self.charge(&mut string_bytes, val)?;\n", ""),
+    ("a copy is not charged", VM, "                    self.charge(&mut string_bytes, &self.registers[*src])?;\n", ""),
+    ("no register limit", VM, "if program.register_count > self.limits.max_registers {", "if false {"),
+    ("the register limit is one off", VM, "if program.register_count > self.limits.max_registers {", "if program.register_count >= self.limits.max_registers {"),
+    ("no budget in a pass", OPT, "match s.len().checked_mul(times).filter(|n| *n <= self.0) {", "match Some(0usize) {"),
+    ("no depth limit", CODEGEN, "if self.depth >= MAX_EXPR_DEPTH {", "if false {"),
+    ("the depth limit is one off", CODEGEN, "if self.depth >= MAX_EXPR_DEPTH {", "if self.depth > MAX_EXPR_DEPTH {"),
     ("a let leaves its name bound", CODEGEN, "            self.vars.remove(name);\n", ""),
 ]
 

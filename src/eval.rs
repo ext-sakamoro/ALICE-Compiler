@@ -3,12 +3,22 @@
 use crate::ast::{BinOp, UnaryOp};
 use crate::ir::Value;
 
+/// The longest string `+` makes, in bytes. There is no outside spec for this; it is chosen because
+/// `s = s + s` doubles a string with each instruction, and this bounds what one operation allocates
+/// while leaving room for any text a program of this language holds as a constant.
+pub const MAX_STRING_LEN: usize = 1 << 20;
+
 pub fn eval_binop(op: BinOp, lhs: &Value, rhs: &Value) -> Option<Value> {
     match (lhs, rhs) {
         (Value::Int(a), Value::Int(b)) => eval_binop_int(op, *a, *b),
         (Value::Float(a), Value::Float(b)) => eval_binop_float(op, *a, *b),
         (Value::Bool(a), Value::Bool(b)) => eval_binop_bool(op, *a, *b),
-        (Value::Str(a), Value::Str(b)) if op == BinOp::Add => Some(Value::Str(format!("{a}{b}"))),
+        (Value::Str(a), Value::Str(b)) if op == BinOp::Add => {
+            if a.len().saturating_add(b.len()) > MAX_STRING_LEN {
+                return None;
+            }
+            Some(Value::Str(format!("{a}{b}")))
+        }
         _ => None,
     }
 }

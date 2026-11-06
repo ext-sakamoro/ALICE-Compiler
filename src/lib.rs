@@ -15,6 +15,8 @@ pub mod optimization;
 pub mod prelude;
 pub mod vm;
 
+pub use crate::eval::MAX_STRING_LEN;
+
 #[cfg(test)]
 mod integration_tests;
 

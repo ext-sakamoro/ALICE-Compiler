@@ -3,12 +3,12 @@
 //! 攻撃者制御 (register index / label id / value) の IR 実行で:
 //! - out-of-bounds register access (index >= register_count) → panic
 //! - undefined label jump → panic
-//! - infinite jump loop → step limit で abort すべき (panic 不許可)
+//! - infinite jump loop → step limit で Err
 //! - Vec::with_capacity(huge) による capacity overflow panic
 //!
 //! を全て有限時間で panic なく完了することを保証する
 //!
-//! 注: VM は無限 loop 検出を持たないため fuzz 側で instruction 長 + register_count を上限化して停止性を担保
+//! 注: instruction 長と register_count の上限は入力を小さく保つため 停止は VM の step limit による
 
 #![no_main]
 
