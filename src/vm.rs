@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::eval::{eval_binop, eval_unaryop};
-use crate::ir::{Ir, IrProgram, LabelId, Value};
+use crate::ir::{Ir, IrProgram, LabelId, Reg, Value};
 
 /// Simple register-based VM to execute IR programs.
 pub struct Vm {
@@ -28,16 +28,24 @@ impl Vm {
     ///
     /// # Errors
     ///
-    /// Returns an error string if execution fails.
+    /// Returns an error string if the program uses a register outside `register_count` or a label
+    /// it does not define (found before any instruction runs, on any path), if the registers cannot
+    /// be allocated, or if execution fails.
     pub fn execute(&mut self, program: &IrProgram) -> Result<Value, String> {
-        self.registers = vec![Value::Unit; program.register_count];
-
         let mut label_map: HashMap<LabelId, usize> = HashMap::new();
         for (i, ir) in program.instructions.iter().enumerate() {
             if let Ir::Label(l) = ir {
                 label_map.insert(*l, i);
             }
         }
+        check_program(program, &label_map)?;
+
+        let mut registers = Vec::new();
+        registers
+            .try_reserve_exact(program.register_count)
+            .map_err(|_| format!("cannot allocate {} registers", program.register_count))?;
+        registers.resize(program.register_count, Value::Unit);
+        self.registers = registers;
 
         let mut pc = 0;
         let len = program.instructions.len();
@@ -92,4 +100,47 @@ impl Vm {
 
         Ok(Value::Unit)
     }
+}
+
+/// Every register and jump target of the program exists.
+fn check_program(program: &IrProgram, labels: &HashMap<LabelId, usize>) -> Result<(), String> {
+    let register = |r: Reg| {
+        if r < program.register_count {
+            Ok(())
+        } else {
+            Err(format!(
+                "register {r} is outside the {} of the program",
+                program.register_count
+            ))
+        }
+    };
+    let label = |l: &LabelId| {
+        if labels.contains_key(l) {
+            Ok(())
+        } else {
+            Err(format!("label {l} is not defined"))
+        }
+    };
+    for ir in &program.instructions {
+        match ir {
+            Ir::LoadConst { dst, .. } => register(*dst)?,
+            Ir::Copy { dst, src } | Ir::UnaryOp { dst, src, .. } => {
+                register(*dst)?;
+                register(*src)?;
+            }
+            Ir::BinOp { dst, lhs, rhs, .. } => {
+                register(*dst)?;
+                register(*lhs)?;
+                register(*rhs)?;
+            }
+            Ir::Label(_) | Ir::Nop => {}
+            Ir::Jump(target) => label(target)?,
+            Ir::JumpIfFalse { cond, target } | Ir::JumpIfTrue { cond, target } => {
+                register(*cond)?;
+                label(target)?;
+            }
+            Ir::Return(reg) => register(*reg)?,
+        }
+    }
+    Ok(())
 }
