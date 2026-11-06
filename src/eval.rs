@@ -22,13 +22,13 @@ const fn eval_binop_int(op: BinOp, a: i64, b: i64) -> Option<Value> {
             if b == 0 {
                 return None;
             }
-            Value::Int(a / b)
+            Value::Int(a.wrapping_div(b))
         }
         BinOp::Mod => {
             if b == 0 {
                 return None;
             }
-            Value::Int(a % b)
+            Value::Int(a.wrapping_rem(b))
         }
         BinOp::Eq => Value::Bool(a == b),
         BinOp::Ne => Value::Bool(a != b),
@@ -69,7 +69,7 @@ const fn eval_binop_bool(op: BinOp, a: bool, b: bool) -> Option<Value> {
 
 pub const fn eval_unaryop(op: UnaryOp, val: &Value) -> Option<Value> {
     match (op, val) {
-        (UnaryOp::Neg, Value::Int(v)) => Some(Value::Int(-*v)),
+        (UnaryOp::Neg, Value::Int(v)) => Some(Value::Int(v.wrapping_neg())),
         (UnaryOp::Neg, Value::Float(v)) => Some(Value::Float(-*v)),
         (UnaryOp::Not, Value::Bool(v)) => Some(Value::Bool(!*v)),
         _ => None,
