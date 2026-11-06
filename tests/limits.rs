@@ -9,13 +9,15 @@
 
 use alice_compiler::ast::{BinOp, Expr};
 use alice_compiler::codegen::{Codegen, CompileError, MAX_EXPR_DEPTH};
-use alice_compiler::MAX_STRING_LEN;
 use alice_compiler::ir::{Ir, IrProgram, Value};
 use alice_compiler::optimization::{constant_folding, constant_propagation, optimize};
 use alice_compiler::vm::{Vm, VmLimits};
+use alice_compiler::MAX_STRING_LEN;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+
+const REFUSE_ABOVE: usize = 1 << 30;
 
 struct Counting;
 static LIVE: AtomicUsize = AtomicUsize::new(0);
@@ -23,6 +25,10 @@ static PEAK: AtomicUsize = AtomicUsize::new(0);
 
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+        // far above any limit: without a limit, this is where the test ends, not the machine's memory
+        if LIVE.load(Ordering::Relaxed) + l.size() > REFUSE_ABOVE {
+            return std::ptr::null_mut();
+        }
         let n = LIVE.fetch_add(l.size(), Ordering::Relaxed) + l.size();
         PEAK.fetch_max(n, Ordering::Relaxed);
         unsafe { System.alloc(l) }

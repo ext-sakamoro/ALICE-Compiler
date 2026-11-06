@@ -8,7 +8,9 @@ Run by hand when these files change: each mutant rebuilds the crate. A mutant th
 or no longer applies counts against the result, since it tested nothing. Each file is restored after
 its mutant, and at the end even after an interrupt.
 """
+import os
 import re
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -22,7 +24,11 @@ COMMAND = [
     "--test", "limits",
     "--test", "optimizer_keeps_meaning",
 ]
-FAILED = re.compile(r"^test .* \.\.\. .*FAILED", re.M)
+# a failed test, or the test process dying: tests/limits.rs refuses to allocate past a cap, so a
+# mutant that removes a limit on strings aborts there
+FAILED = re.compile(r"^test .* \.\.\. .*FAILED|signal: \d+|memory allocation of", re.M)
+# a mutant that removes a limit can loop forever: past this it is killed, and that counts as red
+TIMEOUT_SECS = 300
 
 EVAL = "src/eval.rs"
 VM = "src/vm.rs"
@@ -120,6 +126,22 @@ MUTANTS = [
 ]
 
 
+def run_tests() -> tuple[int | None, str]:
+    """Exit status and output, or None when it ran out of time (the whole process group is killed:
+    killing cargo alone would leave the test binary running)."""
+    p = subprocess.Popen(
+        COMMAND, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        start_new_session=True,
+    )
+    try:
+        out, _ = p.communicate(timeout=TIMEOUT_SECS)
+        return p.returncode, out
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL)
+        out, _ = p.communicate()
+        return None, out
+
+
 def main() -> int:
     if sys.argv[1:]:
         print(__doc__, file=sys.stderr)
@@ -134,18 +156,19 @@ def main() -> int:
             continue
         try:
             path.write_text(original.replace(old, new), encoding="utf-8")
-            done = subprocess.run(COMMAND, cwd=ROOT, capture_output=True, text=True, check=False)
+            rc, output = run_tests()
         finally:
             path.write_text(original, encoding="utf-8")
-        output = done.stdout + done.stderr
         if "could not compile" in output:
             bad.append(name)
             print(f"BROKEN       {name}", flush=True)
-        elif done.returncode != 0 and FAILED.search(output):
+        elif rc is None:
+            print(f"red (killed) {name}", flush=True)
+        elif rc != 0 and FAILED.search(output):
             print(f"red          {name}", flush=True)
         else:
             bad.append(name)
-            print(f"SURVIVED     {name} (rc {done.returncode})", flush=True)
+            print(f"SURVIVED     {name} (rc {rc})", flush=True)
     print(f"{len(MUTANTS) - len(bad)} of {len(MUTANTS)} red")
     return 1 if bad or not MUTANTS else 0
 
