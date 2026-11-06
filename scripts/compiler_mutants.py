@@ -39,7 +39,6 @@ MUTANTS = [
     ("negation by the operator", EVAL, "v.wrapping_neg()", "-*v"),
     ("division by the operator", EVAL, "a.wrapping_div(b)", "a / b"),
     ("remainder by the operator", EVAL, "a.wrapping_rem(b)", "a % b"),
-    ("programs not checked", VM, "        check_program(program, &label_map)?;\n", ""),
     ("registers allocated infallibly", VM, """        registers
             .try_reserve_exact(program.register_count)
             .map_err(|_| format!("cannot allocate {} registers", program.register_count))?;

@@ -254,6 +254,14 @@ fn registers_over_the_limit_are_refused_before_they_are_allocated() {
     assert!(result.is_err());
     assert!(peak < MIB, "{peak}");
     assert_eq!(Vm::new().execute(&program(vec![], limit)), Ok(Value::Unit));
+    // a caller's own limit can allow what no allocator can give: an error too, not a panic
+    let no_limit = VmLimits {
+        max_registers: usize::MAX,
+        ..VmLimits::DEFAULT
+    };
+    assert!(Vm::with_limits(no_limit)
+        .execute(&program(vec![], usize::MAX))
+        .is_err());
 }
 
 /// `-(-(-(... 1)))` nested `depth` levels, built without recursion.

@@ -354,6 +354,8 @@ fn generated_programs_mean_the_same_after_each_pass() {
 fn a_program_refused_as_written_is_refused_after_each_pass() {
     // dead code is still part of the program: a bad jump in it is refused before any step runs
     let bad = [
+        // a copy of a register to itself is what peephole removes, and this register does not exist
+        program(vec![Ir::Copy { dst: 7, src: 7 }], 1),
         program(vec![Ir::Jump(0), Ir::Jump(9), Ir::Label(0)], 0),
         program(
             vec![
