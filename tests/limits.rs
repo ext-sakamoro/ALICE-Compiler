@@ -10,7 +10,9 @@
 use alice_compiler::ast::{BinOp, Expr};
 use alice_compiler::codegen::{Codegen, CompileError, MAX_EXPR_DEPTH};
 use alice_compiler::ir::{Ir, IrProgram, Value};
-use alice_compiler::optimization::{constant_folding, constant_propagation, optimize};
+use alice_compiler::optimization::{
+    constant_folding, constant_propagation, optimize, MAX_PASS_STRING_BYTES,
+};
 use alice_compiler::vm::{Vm, VmLimits};
 use alice_compiler::MAX_STRING_LEN;
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -54,8 +56,14 @@ fn peak_of(f: impl FnOnce()) -> usize {
 }
 
 const MIB: usize = 1 << 20;
-/// What the default limits allow for string bytes in one run or pass, plus 2 MiB for the rest.
-const STATED_PEAK: usize = 66 * MIB;
+/// What the default limits allow in one run: the string bytes, the registers themselves, and 2 MiB
+/// for the rest. Measured at 89.0 MiB with every register allocated and every string byte made.
+const STATED_PEAK: usize = VmLimits::DEFAULT.max_string_bytes
+    + VmLimits::DEFAULT.max_registers * std::mem::size_of::<Value>()
+    + 2 * MIB;
+/// What one pass allows: its string bytes, and 2 MiB for the rest. A pass allocates no registers.
+/// `optimize` runs two passes that make strings, measured at 94.5 MiB together.
+const STATED_PASS_PEAK: usize = MAX_PASS_STRING_BYTES + 2 * MIB;
 
 fn program(instructions: Vec<Ir>, register_count: usize) -> IrProgram {
     IrProgram {
@@ -175,6 +183,19 @@ fn many_strings_at_the_cap_stop_at_the_total() {
 }
 
 #[test]
+fn the_stated_peak_holds_with_every_register_allocated() {
+    let _one = ONE_AT_A_TIME.lock().unwrap();
+    let mut p = many_capped_strings(4096);
+    p.register_count = VmLimits::DEFAULT.max_registers;
+    let mut result = Ok(Value::Unit);
+    let peak = peak_of(|| result = Vm::new().execute(&p));
+    assert!(result.is_err(), "{result:?}");
+    assert!(peak < STATED_PEAK, "{peak}");
+    // the registers and the strings are both there: the statement is about their sum
+    assert!(peak > VmLimits::DEFAULT.max_string_bytes, "{peak}");
+}
+
+#[test]
 fn the_same_strings_made_again_and_again_stop_at_the_total() {
     let _one = ONE_AT_A_TIME.lock().unwrap();
     // nothing is kept, so only a count of what was made can end this before the steps run out
@@ -213,14 +234,84 @@ fn the_string_bytes_limit_is_exact() {
 #[test]
 fn each_folding_pass_stays_under_the_total() {
     let _one = ONE_AT_A_TIME.lock().unwrap();
-    for (name, pass) in [
-        ("folding", constant_folding as fn(&mut IrProgram)),
-        ("propagation", constant_propagation),
-        ("all", optimize),
+    for (name, pass, passes) in [
+        ("folding", constant_folding as fn(&mut IrProgram), 1),
+        ("propagation", constant_propagation, 1),
+        ("all", optimize, 2),
     ] {
         let mut p = many_capped_strings(4096);
         let peak = peak_of(|| pass(&mut p));
-        assert!(peak < 2 * STATED_PEAK, "{name}: {peak}");
+        assert!(peak < passes * STATED_PASS_PEAK, "{name}: {peak}");
+    }
+}
+
+#[test]
+fn the_result_of_an_addition_counts_towards_the_total() {
+    let _one = ONE_AT_A_TIME.lock().unwrap();
+    let limits = |max_string_bytes| VmLimits {
+        max_string_bytes,
+        ..VmLimits::DEFAULT
+    };
+    // two 3-byte loads and their 6-byte sum
+    let p = program(
+        vec![
+            load(0, "abc"),
+            load(1, "def"),
+            Ir::BinOp {
+                op: BinOp::Add,
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Ir::Return(2),
+        ],
+        3,
+    );
+    assert!(Vm::with_limits(limits(12)).execute(&p).is_ok());
+    assert!(Vm::with_limits(limits(11)).execute(&p).is_err());
+}
+
+/// More strings than a pass may make: 128 copies of 1 MiB, in the form that goes through one charge.
+fn distinct_loads() -> IrProgram {
+    let ir = (0..128).map(|dst| load(dst, &"x".repeat(MIB))).collect();
+    program(ir, 128)
+}
+
+fn distinct_sums() -> IrProgram {
+    let half = "x".repeat(MIB / 2);
+    let mut ir = vec![load(0, &half), load(1, &half)];
+    ir.extend((2..130).map(|dst| Ir::BinOp {
+        op: BinOp::Add,
+        dst,
+        lhs: 0,
+        rhs: 1,
+    }));
+    program(ir, 130)
+}
+
+#[test]
+fn every_place_a_pass_makes_a_string_is_counted() {
+    let _one = ONE_AT_A_TIME.lock().unwrap();
+    for (name, pass, make) in [
+        (
+            "folding, loads",
+            constant_folding as fn(&mut IrProgram),
+            distinct_loads as fn() -> IrProgram,
+        ),
+        ("folding, sums", constant_folding, distinct_sums),
+        ("folding, copies", constant_folding, || {
+            many_capped_strings(128)
+        }),
+        ("propagation, loads", constant_propagation, distinct_loads),
+        ("propagation, copies", constant_propagation, || {
+            many_capped_strings(128)
+        }),
+    ] {
+        let mut p = make();
+        let peak = peak_of(|| pass(&mut p));
+        assert!(peak < STATED_PASS_PEAK, "{name}: {peak}");
+        // the program is large enough that the count is what stopped it
+        assert!(peak > STATED_PASS_PEAK / 2, "{name}: {peak}");
     }
 }
 
@@ -294,6 +385,13 @@ fn nesting_stops_at_the_limit() {
         Err(CompileError::TooDeep)
     );
     std::mem::forget(deep);
+}
+
+#[test]
+fn nesting_counts_depth_and_not_breadth() {
+    let _one = ONE_AT_A_TIME.lock().unwrap();
+    let wide = Expr::Block(vec![Expr::Int(1); MAX_EXPR_DEPTH * 2]);
+    assert!(Codegen::new().compile_expr(&wide).is_ok());
 }
 
 #[test]

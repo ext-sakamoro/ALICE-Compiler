@@ -3,8 +3,10 @@
 //!
 //! oracle: the unoptimized VM is the definition of what a program means, and each generated program
 //! runs both ways. The rows are programs with a known answer from reading them by hand. A program
-//! that runs into a limit is not compared, since optimizing changes how many steps and bytes it takes;
-//! the count of programs compared is asserted, so a generator that only hits limits fails.
+//! that runs into a limit as written is not compared, since optimizing can take it under the limit.
+//! An optimized program over a limit its original stays under counts as a difference: optimizing
+//! never adds a step or a byte. The count of programs compared is asserted, so a generator that only
+//! hits limits fails.
 
 use alice_compiler::ast::{BinOp, UnaryOp};
 use alice_compiler::ir::{Ir, IrProgram, Value};
@@ -64,6 +66,61 @@ fn program(instructions: Vec<Ir>, register_count: usize) -> IrProgram {
 #[allow(clippy::too_many_lines)]
 fn rows() -> Vec<(&'static str, IrProgram, Value)> {
     vec![
+        (
+            "folding forgets a register written by an operation it cannot fold",
+            // after the label r2 is unknown, so `r0 = r2 + r2` is not folded, and r0 is not the 1 loaded before it
+            program(
+                vec![
+                    int(2, 5),
+                    Ir::Label(0),
+                    int(0, 1),
+                    int(3, 1),
+                    add(0, 2, 2),
+                    add(3, 0, 3),
+                    Ir::Return(3),
+                ],
+                4,
+            ),
+            Value::Int(11),
+        ),
+        (
+            "folding forgets a register written by a negation it cannot fold",
+            // the same with `r0 = -r2`
+            program(
+                vec![
+                    int(2, 5),
+                    Ir::Label(0),
+                    int(0, 1),
+                    int(3, 1),
+                    Ir::UnaryOp {
+                        op: UnaryOp::Neg,
+                        dst: 0,
+                        src: 2,
+                    },
+                    add(3, 0, 3),
+                    Ir::Return(3),
+                ],
+                4,
+            ),
+            Value::Int(-4),
+        ),
+        (
+            "folding forgets a register copied from one it does not know",
+            // the same with `r0 = r2`
+            program(
+                vec![
+                    int(2, 5),
+                    Ir::Label(0),
+                    int(0, 1),
+                    int(3, 1),
+                    Ir::Copy { dst: 0, src: 2 },
+                    add(3, 0, 3),
+                    Ir::Return(3),
+                ],
+                4,
+            ),
+            Value::Int(6),
+        ),
         (
             "a register written by what cannot be folded is not the old constant",
             // after the label nothing is known, so `r0 = r2 + r2` is not folded and writes r0
@@ -193,7 +250,7 @@ fn an_if_keeps_its_value_through_the_optimizer() {
 #[test]
 fn programs_with_a_known_answer() {
     let rows = rows();
-    assert!(rows.len() >= 5);
+    assert!(rows.len() >= 8);
     let mut wrong = 0;
     for (name, p, expected) in &rows {
         assert_eq!(run(p), Ok(expected.clone()), "as written: {name}");
@@ -334,11 +391,8 @@ fn generated_programs_mean_the_same_after_each_pass() {
             let mut o = p.clone();
             f(&mut o);
             let got = run(&o);
-            if is_limit(&got) {
-                continue;
-            }
             compared += 1;
-            if !same(&plain, &got) && differ.len() < 5 {
+            if (is_limit(&got) || !same(&plain, &got)) && differ.len() < 5 {
                 differ.push(format!(
                     "{pass}: {plain:?} became {got:?} in {:?}",
                     p.instructions

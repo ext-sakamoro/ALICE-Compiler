@@ -91,3 +91,24 @@ fn a_bound_name_still_compiles() {
         Err(undefined(""))
     );
 }
+
+#[test]
+fn an_inner_let_brings_back_the_outer_name_when_it_ends() {
+    // let x = 1 in (let x = 2 in x) + x: the answer is 2 + 1, by the scope of a let
+    let x = || Expr::Var("x".to_owned());
+    let e = Expr::Let {
+        name: "x".to_owned(),
+        value: Box::new(Expr::Int(1)),
+        body: Box::new(Expr::Binary {
+            op: BinOp::Add,
+            lhs: Box::new(Expr::Let {
+                name: "x".to_owned(),
+                value: Box::new(Expr::Int(2)),
+                body: Box::new(x()),
+            }),
+            rhs: Box::new(x()),
+        }),
+    };
+    assert_eq!(compile_and_run(&e), Ok(Value::Int(3)));
+    assert_eq!(compile_optimize_and_run(&e), Ok(Value::Int(3)));
+}

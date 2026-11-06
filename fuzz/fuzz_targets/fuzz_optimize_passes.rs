@@ -161,8 +161,8 @@ fuzz_target!(|data: &[u8]| {
     // 各 pass も全体も、最適化しない実行と同じ値か同じ拒否を返す
     for optimized in [&clone_a, &clone_b, &clone_c, &clone_d, &program] {
         let got = run(optimized);
-        if !limit(&plain) && !limit(&got) {
-            assert!(same(&plain, &got), "{plain:?} became {got:?}");
+        if !limit(&plain) {
+            assert!(!limit(&got) && same(&plain, &got), "{plain:?} became {got:?}");
         }
     }
 });

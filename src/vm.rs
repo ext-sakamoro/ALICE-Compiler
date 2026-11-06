@@ -15,7 +15,8 @@ pub struct VmLimits {
     /// this is long enough for what a compiled expression does, which has no backward jumps.
     pub max_steps: u64,
     /// Bytes of strings made, by `+`, by a copy and by a load, added up over the execution, freed or
-    /// not. Default 64 MiB: with the per-string cap it bounds what registers can hold at once.
+    /// not. Default 64 MiB: with the per-string cap it bounds what registers can hold at once, on top of
+    /// the registers themselves (`max_registers` values).
     pub max_string_bytes: usize,
     /// `register_count` of a program. Default 2^20: a register costs its size whether or not the
     /// program uses it, and a compiled expression needs one per node.

@@ -122,6 +122,83 @@ MUTANTS = [
 """, """pub fn peephole(program: &mut IrProgram) {
 """),
     ("a let leaves its name bound", CODEGEN, "            self.vars.remove(name);\n", ""),
+    ("a let does not bring back the outer name", CODEGEN, "            self.vars.insert(name.to_owned(), prev);\n", ""),
+    ("optimizing adds steps", OPT, """    peephole(program);
+}""", """    peephole(program);
+    program.instructions.splice(0..0, vec![Ir::Nop; 1985]);
+}"""),
+    ("depth not given back", CODEGEN, "        self.depth -= 1;\n", ""),
+    ("the result of + is not charged", VM, "                    self.charge(&mut string_bytes, &result)?;\n", ""),
+    ("folding keeps a constant under an operation", OPT, """                known.remove(dst);
+            }
+            Ir::UnaryOp { op, dst, src } => {""", """            }
+            Ir::UnaryOp { op, dst, src } => {"""),
+    ("folding keeps a constant under a negation", OPT, """                known.remove(dst);
+            }
+            Ir::Copy { dst, src } => {
+                if let Some(v) = known.get(src) {
+                    if !budget.spend(v, 1) {""", """            }
+            Ir::Copy { dst, src } => {
+                if let Some(v) = known.get(src) {
+                    if !budget.spend(v, 1) {"""),
+    ("folding keeps a constant under a copy", OPT, """                    known.insert(*dst, v);
+                } else {
+                    known.remove(dst);
+                }""", """                    known.insert(*dst, v);
+                }"""),
+    ("propagation keeps a constant under a copy", OPT, """                    *ir = Ir::LoadConst { dst: *dst, val: v };
+                } else {
+                    known.remove(dst);
+                }""", """                    *ir = Ir::LoadConst { dst: *dst, val: v };
+                }"""),
+    ("a load in folding is not counted", OPT, """pub fn constant_folding(program: &mut IrProgram) {
+    let mut known: HashMap<Reg, Value> = HashMap::new();
+    let mut budget = Budget(MAX_PASS_STRING_BYTES);
+
+    for ir in &mut program.instructions {
+        match ir {
+            Ir::LoadConst { dst, val } => {
+                if !budget.spend(val, 1) {
+                    return;
+                }
+""", """pub fn constant_folding(program: &mut IrProgram) {
+    let mut known: HashMap<Reg, Value> = HashMap::new();
+    let mut budget = Budget(MAX_PASS_STRING_BYTES);
+
+    for ir in &mut program.instructions {
+        match ir {
+            Ir::LoadConst { dst, val } => {
+"""),
+    ("a sum in folding is not counted", OPT, """                        if !budget.spend(&result, 2) {
+                            return;
+                        }
+""", ""),
+    ("a copy in folding is not counted", OPT, """                    if !budget.spend(v, 1) {
+                        return;
+                    }
+""", ""),
+    ("a load in propagation is not counted", OPT, """pub fn constant_propagation(program: &mut IrProgram) {
+    let mut known: HashMap<Reg, Value> = HashMap::new();
+    let mut budget = Budget(MAX_PASS_STRING_BYTES);
+
+    for ir in &mut program.instructions {
+        match ir {
+            Ir::LoadConst { dst, val } => {
+                if !budget.spend(val, 1) {
+                    return;
+                }
+""", """pub fn constant_propagation(program: &mut IrProgram) {
+    let mut known: HashMap<Reg, Value> = HashMap::new();
+    let mut budget = Budget(MAX_PASS_STRING_BYTES);
+
+    for ir in &mut program.instructions {
+        match ir {
+            Ir::LoadConst { dst, val } => {
+"""),
+    ("a copy in propagation is not counted", OPT, """                    if !budget.spend(v, 2) {
+                        return;
+                    }
+""", ""),
 ]
 
 
