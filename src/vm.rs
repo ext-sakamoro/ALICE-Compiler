@@ -83,13 +83,7 @@ impl Vm {
     /// it does not define (found before any instruction runs, on any path), if it goes over
     /// [`VmLimits`], if the registers cannot be allocated, or if execution fails.
     pub fn execute(&mut self, program: &IrProgram) -> Result<Value, String> {
-        let mut label_map: HashMap<LabelId, usize> = HashMap::new();
-        for (i, ir) in program.instructions.iter().enumerate() {
-            if let Ir::Label(l) = ir {
-                label_map.insert(*l, i);
-            }
-        }
-        check_program(program, &label_map)?;
+        let label_map = check_program(program)?;
 
         if program.register_count > self.limits.max_registers {
             return Err(format!(
@@ -168,8 +162,14 @@ impl Vm {
     }
 }
 
-/// Every register and jump target of the program exists.
-fn check_program(program: &IrProgram, labels: &HashMap<LabelId, usize>) -> Result<(), String> {
+/// Every register and jump target of the program exists. Returns where each label is.
+pub(crate) fn check_program(program: &IrProgram) -> Result<HashMap<LabelId, usize>, String> {
+    let mut labels: HashMap<LabelId, usize> = HashMap::new();
+    for (i, ir) in program.instructions.iter().enumerate() {
+        if let Ir::Label(l) = ir {
+            labels.insert(*l, i);
+        }
+    }
     let register = |r: Reg| {
         if r < program.register_count {
             Ok(())
@@ -208,5 +208,5 @@ fn check_program(program: &IrProgram, labels: &HashMap<LabelId, usize>) -> Resul
             Ir::Return(reg) => register(*reg)?,
         }
     }
-    Ok(())
+    Ok(labels)
 }

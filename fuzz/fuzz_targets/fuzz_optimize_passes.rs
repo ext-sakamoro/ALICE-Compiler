@@ -16,6 +16,7 @@ use alice_compiler::ir::{Ir, IrProgram, LabelId, Reg, Value};
 use alice_compiler::optimization::{
     constant_folding, constant_propagation, dead_code_elimination, optimize, peephole,
 };
+use alice_compiler::vm::{Vm, VmLimits};
 use arbitrary::Unstructured;
 use libfuzzer_sys::fuzz_target;
 
@@ -138,6 +139,30 @@ fuzz_target!(|data: &[u8]| {
     let mut clone_d = program.clone();
     peephole(&mut clone_d);
 
+    // 実行の上限 上限に当たった実行は比べない (最適化で手数が変わるため)
+    const LIMITS: VmLimits = VmLimits {
+        max_steps: 2_000,
+        max_string_bytes: 1 << 16,
+        max_registers: 64,
+    };
+    let run = |p: &IrProgram| Vm::with_limits(LIMITS).execute(p);
+    let limit = |r: &Result<Value, String>| r.as_ref().is_err_and(|e| e.contains("over the limit"));
+    let same = |a: &Result<Value, String>, b: &Result<Value, String>| match (a, b) {
+        (Ok(Value::Float(x)), Ok(Value::Float(y))) => x.to_bits() == y.to_bits(),
+        (Ok(x), Ok(y)) => x == y,
+        (Err(_), Err(_)) => true,
+        _ => false,
+    };
+    let plain = run(&program);
+
     // フル optimize (canonical 順で 4 pass 適用)
     optimize(&mut program);
+
+    // 各 pass も全体も、最適化しない実行と同じ値か同じ拒否を返す
+    for optimized in [&clone_a, &clone_b, &clone_c, &clone_d, &program] {
+        let got = run(optimized);
+        if !limit(&plain) && !limit(&got) {
+            assert!(same(&plain, &got), "{plain:?} became {got:?}");
+        }
+    }
 });

@@ -20,6 +20,7 @@ COMMAND = [
     "--test", "vm_rejects_a_bad_program",
     "--test", "undefined_variable",
     "--test", "limits",
+    "--test", "optimizer_keeps_meaning",
 ]
 FAILED = re.compile(r"^test .* \.\.\. .*FAILED", re.M)
 
@@ -73,6 +74,48 @@ MUTANTS = [
     ("no budget in a pass", OPT, "match s.len().checked_mul(times).filter(|n| *n <= self.0) {", "match Some(0usize) {"),
     ("no depth limit", CODEGEN, "if self.depth >= MAX_EXPR_DEPTH {", "if false {"),
     ("the depth limit is one off", CODEGEN, "if self.depth >= MAX_EXPR_DEPTH {", "if self.depth > MAX_EXPR_DEPTH {"),
+    ("folding keeps constants across a label", OPT, """            // another path can come here with other values
+            Ir::Label(_) => known.clear(),
+            _ => {}
+        }
+    }
+}
+
+/// Constant propagation""", """            _ => {}
+        }
+    }
+}
+
+/// Constant propagation"""),
+    ("propagation keeps constants across a label", OPT, """            // another path can come here with other values
+            Ir::Label(_) => known.clear(),
+            _ => {}
+        }
+    }
+}
+
+/// Dead code""", """            _ => {}
+        }
+    }
+}
+
+/// Dead code"""),
+    ("propagation ignores a write by an operation", OPT, """            Ir::BinOp { dst, .. } | Ir::UnaryOp { dst, .. } => {
+                known.remove(dst);
+            }
+""", ""),
+    ("dead code removes what would be refused", OPT, """pub fn dead_code_elimination(program: &mut IrProgram) {
+    if check_program(program).is_err() {
+        return;
+    }
+""", """pub fn dead_code_elimination(program: &mut IrProgram) {
+"""),
+    ("peephole removes what would be refused", OPT, """pub fn peephole(program: &mut IrProgram) {
+    if check_program(program).is_err() {
+        return;
+    }
+""", """pub fn peephole(program: &mut IrProgram) {
+"""),
     ("a let leaves its name bound", CODEGEN, "            self.vars.remove(name);\n", ""),
 ]
 

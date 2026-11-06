@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::eval::{eval_binop, eval_unaryop};
 use crate::ir::{Ir, IrProgram, Reg, Value};
-use crate::vm::VmLimits;
+use crate::vm::{check_program, VmLimits};
 
 /// Bytes of strings one pass may make. There is no outside spec for this; it is the
 /// `max_string_bytes` default of the VM, chosen because a pass holds what a run would.
@@ -52,8 +52,10 @@ pub fn constant_folding(program: &mut IrProgram) {
                             dst: *dst,
                             val: result,
                         };
+                        continue;
                     }
                 }
+                known.remove(dst);
             }
             Ir::UnaryOp { op, dst, src } => {
                 if let Some(sv) = known.get(src) {
@@ -63,8 +65,10 @@ pub fn constant_folding(program: &mut IrProgram) {
                             dst: *dst,
                             val: result,
                         };
+                        continue;
                     }
                 }
+                known.remove(dst);
             }
             Ir::Copy { dst, src } => {
                 if let Some(v) = known.get(src) {
@@ -73,8 +77,12 @@ pub fn constant_folding(program: &mut IrProgram) {
                     }
                     let v = v.clone();
                     known.insert(*dst, v);
+                } else {
+                    known.remove(dst);
                 }
             }
+            // another path can come here with other values
+            Ir::Label(_) => known.clear(),
             _ => {}
         }
     }
@@ -101,15 +109,27 @@ pub fn constant_propagation(program: &mut IrProgram) {
                     let v = v.clone();
                     known.insert(*dst, v.clone());
                     *ir = Ir::LoadConst { dst: *dst, val: v };
+                } else {
+                    known.remove(dst);
                 }
             }
+            Ir::BinOp { dst, .. } | Ir::UnaryOp { dst, .. } => {
+                known.remove(dst);
+            }
+            // another path can come here with other values
+            Ir::Label(_) => known.clear(),
             _ => {}
         }
     }
 }
 
 /// Dead code elimination: remove nop instructions and unreachable code after unconditional jumps.
+///
+/// A program the VM refuses is left as it is: removing the bad part would make it run.
 pub fn dead_code_elimination(program: &mut IrProgram) {
+    if check_program(program).is_err() {
+        return;
+    }
     let mut i = 0;
     while i < program.instructions.len() {
         if matches!(program.instructions[i], Ir::Jump(_)) {
@@ -129,7 +149,12 @@ pub fn dead_code_elimination(program: &mut IrProgram) {
 }
 
 /// Peephole optimization: simplify trivial patterns.
+///
+/// A program the VM refuses is left as it is: removing the bad part would make it run.
 pub fn peephole(program: &mut IrProgram) {
+    if check_program(program).is_err() {
+        return;
+    }
     for ir in &mut program.instructions {
         if matches!(ir, Ir::Copy { dst, src } if *dst == *src) {
             *ir = Ir::Nop;
