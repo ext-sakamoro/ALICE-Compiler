@@ -37,6 +37,12 @@ CODEGEN = "src/codegen.rs"
 OPT = "src/optimization.rs"
 # (what breaks, file, old text, new text)
 MUTANTS = [
+    ("dead code only after a jump at the start", OPT, "if matches!(program.instructions[i], Ir::Jump(_)) {", "if i == 0 && matches!(program.instructions[i], Ir::Jump(_)) {"),
+    ("one dead instruction cleared", OPT, "                program.instructions[j] = Ir::Nop;\n                j += 1;", "                program.instructions[j] = Ir::Nop;\n                break;"),
+    ("peephole stops after one", OPT, "            *ir = Ir::Nop;\n", "            *ir = Ir::Nop;\n            break;\n"),
+    ("a unary result not remembered", OPT, "                        known.insert(*dst, result.clone());\n                        *ir = Ir::LoadConst {\n                            dst: *dst,\n                            val: result,\n                        };\n                        continue;\n                    }\n                }\n                known.remove(dst);\n            }\n            Ir::Copy", "                        *ir = Ir::LoadConst {\n                            dst: *dst,\n                            val: result,\n                        };\n                        continue;\n                    }\n                }\n                known.remove(dst);\n            }\n            Ir::Copy"),
+    ("one register twice not folded", OPT, "if let (Some(lv), Some(rv)) = (known.get(lhs), known.get(rhs)) {", "if let (Some(lv), Some(rv), true) = (known.get(lhs), known.get(rhs), lhs != rhs) {"),
+    ("propagation before folding", OPT, "    constant_folding(program);\n    constant_propagation(program);", "    constant_propagation(program);\n    constant_folding(program);"),
     ("optimize skips folding", OPT, "    constant_folding(program);\n    constant_propagation(program);", "    constant_propagation(program);"),
     ("optimize skips propagation", OPT, "    constant_propagation(program);\n    dead_code_elimination(program);", "    dead_code_elimination(program);"),
     ("optimize skips dead code", OPT, "    dead_code_elimination(program);\n    peephole(program);", "    peephole(program);"),
