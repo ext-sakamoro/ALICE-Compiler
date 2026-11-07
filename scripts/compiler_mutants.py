@@ -23,6 +23,7 @@ COMMAND = [
     "--test", "undefined_variable",
     "--test", "limits",
     "--test", "optimizer_keeps_meaning",
+    "--test", "optimizer_output_shape",
 ]
 # a failed test, or the test process dying: tests/limits.rs refuses to allocate past a cap, so a
 # mutant that removes a limit on strings aborts there
@@ -36,6 +37,10 @@ CODEGEN = "src/codegen.rs"
 OPT = "src/optimization.rs"
 # (what breaks, file, old text, new text)
 MUTANTS = [
+    ("optimize skips folding", OPT, "    constant_folding(program);\n    constant_propagation(program);", "    constant_propagation(program);"),
+    ("optimize skips propagation", OPT, "    constant_propagation(program);\n    dead_code_elimination(program);", "    dead_code_elimination(program);"),
+    ("optimize skips dead code", OPT, "    dead_code_elimination(program);\n    peephole(program);", "    peephole(program);"),
+    ("optimize skips peephole", OPT, "    dead_code_elimination(program);\n    peephole(program);", "    dead_code_elimination(program);"),
     ("negation by the operator", EVAL, "v.wrapping_neg()", "-*v"),
     ("division by the operator", EVAL, "a.wrapping_div(b)", "a / b"),
     ("remainder by the operator", EVAL, "a.wrapping_rem(b)", "a % b"),
